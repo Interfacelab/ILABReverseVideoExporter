@@ -15,16 +15,24 @@ NSString * const kILABReverseVideoExportSessionErrorDomain = @"kILABReverseVideo
 
 +(NSError *)reverseVideoExportSessionError:(ILABReverseVideoExportSessionErrorStatus)errorStatus {
     switch(errorStatus) {
-        case ILABReverseVideoExportSessionMissingOutput:
+        case ILABReverseVideoExportSessionMissingOutputError:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Missing URL for output."}];
-
-        case ILABAudioTrackExporterInvalidTrackIndex:
+        case ILABReverseVideoExportSessionUnableToStartReaderError:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Unable to start reader."}];
+        case ILABReverseVideoExportSessionNoSamplesError:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"No samples in source video."}];
+        case ILABReverseVideoExportSessionUnableToStartWriterError:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Unable to start writer."}];
+        case ILABReverseVideoExportSessionUnableToWriteFrameError:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Unable to append frame to output."}];
+            
+        case ILABAudioTrackExporterInvalidTrackIndexError:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"The specified track index is invalid."}];
-        case ILABAudioTrackExporterCannotAddInput:
+        case ILABAudioTrackExporterCannotAddInputError:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Cannot add input for audio export."}];
-        case ILABAudioTrackExporterCannotAddOutput:
+        case ILABAudioTrackExporterCannotAddOutputError:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Cannout add output for audio export."}];
-        case ILABAudioTrackExporterExportInProgress:
+        case ILABAudioTrackExporterExportInProgressError:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Export is already in progress."}];
     }
 }

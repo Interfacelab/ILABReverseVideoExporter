@@ -4,5 +4,6 @@ use_frameworks!
 
 target 'ILABReverseVideoExporterDemo' do
   pod 'ILABReverseVideoExporter', :path => "../"
-  pod 'owjhart/QBImagePicker'
+  pod 'OHQBImagePicker'
+  pod 'M13ProgressSuite'
 end

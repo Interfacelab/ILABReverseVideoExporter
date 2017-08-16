@@ -7,16 +7,19 @@
 
 #import <Foundation/Foundation.h>
 
-
 extern NSString * const kILABReverseVideoExportSessionErrorDomain;
 
 typedef enum : NSInteger {
-    ILABReverseVideoExportSessionMissingOutput        = -100,
-
-    ILABAudioTrackExporterInvalidTrackIndex           = -200,
-    ILABAudioTrackExporterCannotAddInput              = -201,
-    ILABAudioTrackExporterCannotAddOutput             = -202,
-    ILABAudioTrackExporterExportInProgress            = -203,
+    ILABReverseVideoExportSessionMissingOutputError        = -100,
+    ILABReverseVideoExportSessionUnableToStartReaderError  = -101,
+    ILABReverseVideoExportSessionNoSamplesError            = -102,
+    ILABReverseVideoExportSessionUnableToStartWriterError  = -103,
+    ILABReverseVideoExportSessionUnableToWriteFrameError   = -104,
+    
+    ILABAudioTrackExporterInvalidTrackIndexError           = -200,
+    ILABAudioTrackExporterCannotAddInputError              = -201,
+    ILABAudioTrackExporterCannotAddOutputError             = -202,
+    ILABAudioTrackExporterExportInProgressError            = -203,
 } ILABReverseVideoExportSessionErrorStatus;
 
 /**
@@ -30,9 +33,10 @@ typedef void(^ILABCompleteBlock)(BOOL complete, NSError *error);
 /**
  Progress block called during reversal process
  
- @param progress The current progress normalized 0 .. 1
+ @param currentOperation The current operation name/title
+ @param progress The current progress normalized 0 .. 1, INFINITY for an operation that is indeterminate
  */
-typedef void(^ILABProgressBlock)(float progress);
+typedef void(^ILABProgressBlock)(NSString *currentOperation, float progress);
 
 
 /**

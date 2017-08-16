@@ -7,10 +7,9 @@
 //  Copyright © 2017 chrissung. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
-#import <AVFoundation/AVFoundation.h>
 #import "ILABReverseVideoDefs.h"
 
+@import AVFoundation;
 
 /**
  Utility class for reversing videos
@@ -23,9 +22,11 @@
 @property (readonly) CMTime sourceDuration;                         /**< Duration of source asset */
 @property (readonly) NSTimeInterval sourceDurationSeconds;          /**< Duration in seconds of the source asset */
 @property (readonly) float sourceFPS;                               /**< Maximum FPS of the source asset */
+@property (readonly) CGAffineTransform sourceTransform;             /**< Source transform */
 @property (readonly) CGSize sourceSize;                             /**< Natural size of the source asset */
 
 @property (assign, nonatomic) BOOL showDebug;                       /**< Show debug output messages when reversing */
+@property (assign, nonatomic) NSInteger samplesPerPass;             /**< Samples per pass when reversing video */
 @property (assign, nonatomic) BOOL skipAudio;                       /**< Skip the processing of audio */
 @property (copy, nonatomic) NSURL *outputURL;                       /**< URL to output reverse video to */
 @property (strong, nonatomic) NSDictionary *videoOutputSettings;    /**< Output settings for reversed video */

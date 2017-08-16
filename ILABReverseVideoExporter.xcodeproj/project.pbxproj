@@ -8,11 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		FF76ACE21F43CB2700347273 /* ILABReverseVideoExporter.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76ACE01F43CB2700347273 /* ILABReverseVideoExporter.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		FF76AD0C1F43D00100347273 /* ILABAudioTrackExporter.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76AD061F43D00100347273 /* ILABAudioTrackExporter.h */; };
+		FF76AD0C1F43D00100347273 /* ILABAudioTrackExporter.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76AD061F43D00100347273 /* ILABAudioTrackExporter.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		FF76AD0D1F43D00100347273 /* ILABAudioTrackExporter.m in Sources */ = {isa = PBXBuildFile; fileRef = FF76AD071F43D00100347273 /* ILABAudioTrackExporter.m */; };
-		FF76AD0E1F43D00100347273 /* ILABReverseVideoDefs.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76AD081F43D00100347273 /* ILABReverseVideoDefs.h */; };
+		FF76AD0E1F43D00100347273 /* ILABReverseVideoDefs.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76AD081F43D00100347273 /* ILABReverseVideoDefs.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		FF76AD0F1F43D00100347273 /* ILABReverseVideoDefs.m in Sources */ = {isa = PBXBuildFile; fileRef = FF76AD091F43D00100347273 /* ILABReverseVideoDefs.m */; };
-		FF76AD101F43D00100347273 /* ILABReverseVideoExportSession.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76AD0A1F43D00100347273 /* ILABReverseVideoExportSession.h */; };
+		FF76AD101F43D00100347273 /* ILABReverseVideoExportSession.h in Headers */ = {isa = PBXBuildFile; fileRef = FF76AD0A1F43D00100347273 /* ILABReverseVideoExportSession.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		FF76AD111F43D00100347273 /* ILABReverseVideoExportSession.m in Sources */ = {isa = PBXBuildFile; fileRef = FF76AD0B1F43D00100347273 /* ILABReverseVideoExportSession.m */; };
 /* End PBXBuildFile section */
 

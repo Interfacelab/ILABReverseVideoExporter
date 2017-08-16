@@ -7,15 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E82B30E993355C4D587A9F0C /* Pods_ILABReverseVideoExporterDemo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A898CC3C032682F05A6FEE87 /* Pods_ILABReverseVideoExporterDemo.framework */; };
 		FF76ACF11F43CCCC00347273 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = FF76ACF01F43CCCC00347273 /* main.m */; };
 		FF76ACF41F43CCCC00347273 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = FF76ACF31F43CCCC00347273 /* AppDelegate.m */; };
 		FF76ACF71F43CCCC00347273 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FF76ACF61F43CCCC00347273 /* ViewController.m */; };
 		FF76ACFA1F43CCCC00347273 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FF76ACF81F43CCCC00347273 /* Main.storyboard */; };
 		FF76ACFC1F43CCCC00347273 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FF76ACFB1F43CCCC00347273 /* Assets.xcassets */; };
 		FF76ACFF1F43CCCC00347273 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FF76ACFD1F43CCCC00347273 /* LaunchScreen.storyboard */; };
+		FF76AD131F43D25400347273 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF76AD121F43D25400347273 /* AVKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		2F799591F8C3982442A39C8C /* Pods-ILABReverseVideoExporterDemo.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ILABReverseVideoExporterDemo.debug.xcconfig"; path = "Pods/Target Support Files/Pods-ILABReverseVideoExporterDemo/Pods-ILABReverseVideoExporterDemo.debug.xcconfig"; sourceTree = "<group>"; };
+		A898CC3C032682F05A6FEE87 /* Pods_ILABReverseVideoExporterDemo.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ILABReverseVideoExporterDemo.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1762F98CA1651CC462DE239 /* Pods-ILABReverseVideoExporterDemo.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ILABReverseVideoExporterDemo.release.xcconfig"; path = "Pods/Target Support Files/Pods-ILABReverseVideoExporterDemo/Pods-ILABReverseVideoExporterDemo.release.xcconfig"; sourceTree = "<group>"; };
 		FF76ACEC1F43CCCC00347273 /* ILABReverseVideoExporterDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ILABReverseVideoExporterDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF76ACF01F43CCCC00347273 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		FF76ACF21F43CCCC00347273 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
@@ -26,6 +31,7 @@
 		FF76ACFB1F43CCCC00347273 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FF76ACFE1F43CCCC00347273 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		FF76AD001F43CCCC00347273 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FF76AD121F43D25400347273 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,17 +39,39 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FF76AD131F43D25400347273 /* AVKit.framework in Frameworks */,
+				E82B30E993355C4D587A9F0C /* Pods_ILABReverseVideoExporterDemo.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D8D5A40C28EED87B6E49BCB3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FF76AD121F43D25400347273 /* AVKit.framework */,
+				A898CC3C032682F05A6FEE87 /* Pods_ILABReverseVideoExporterDemo.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F92D0ED3E8A8B2BFF87E6C49 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				2F799591F8C3982442A39C8C /* Pods-ILABReverseVideoExporterDemo.debug.xcconfig */,
+				C1762F98CA1651CC462DE239 /* Pods-ILABReverseVideoExporterDemo.release.xcconfig */,
+			);
+			name = Pods;
+			sourceTree = "<group>";
+		};
 		FF76ACE31F43CCCC00347273 = {
 			isa = PBXGroup;
 			children = (
 				FF76ACEE1F43CCCC00347273 /* ILABReverseVideoExporterDemo */,
 				FF76ACED1F43CCCC00347273 /* Products */,
+				F92D0ED3E8A8B2BFF87E6C49 /* Pods */,
+				D8D5A40C28EED87B6E49BCB3 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -86,9 +114,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF76AD031F43CCCC00347273 /* Build configuration list for PBXNativeTarget "ILABReverseVideoExporterDemo" */;
 			buildPhases = (
+				12432F5962B5FA40AEA3A8AF /* [CP] Check Pods Manifest.lock */,
 				FF76ACE81F43CCCC00347273 /* Sources */,
 				FF76ACE91F43CCCC00347273 /* Frameworks */,
 				FF76ACEA1F43CCCC00347273 /* Resources */,
+				EADF49FE22C6C6B200A9D958 /* [CP] Embed Pods Frameworks */,
+				C18DD2C23F9FAE904D8590BF /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -145,6 +176,64 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		12432F5962B5FA40AEA3A8AF /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-ILABReverseVideoExporterDemo-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		C18DD2C23F9FAE904D8590BF /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "[CP] Copy Pods Resources";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-ILABReverseVideoExporterDemo/Pods-ILABReverseVideoExporterDemo-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		EADF49FE22C6C6B200A9D958 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/Pods/Target Support Files/Pods-ILABReverseVideoExporterDemo/Pods-ILABReverseVideoExporterDemo-frameworks.sh",
+				"${BUILT_PRODUCTS_DIR}/ILABReverseVideoExporter/ILABReverseVideoExporter.framework",
+				"${BUILT_PRODUCTS_DIR}/M13ProgressSuite/M13ProgressSuite.framework",
+				"${BUILT_PRODUCTS_DIR}/OHQBImagePicker/OHQBImagePicker.framework",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ILABReverseVideoExporter.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/M13ProgressSuite.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OHQBImagePicker.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-ILABReverseVideoExporterDemo/Pods-ILABReverseVideoExporterDemo-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		FF76ACE81F43CCCC00347273 /* Sources */ = {
@@ -271,6 +360,7 @@
 		};
 		FF76AD041F43CCCC00347273 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2F799591F8C3982442A39C8C /* Pods-ILABReverseVideoExporterDemo.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = 4VS8SA23V9;
@@ -283,6 +373,7 @@
 		};
 		FF76AD051F43CCCC00347273 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C1762F98CA1651CC462DE239 /* Pods-ILABReverseVideoExporterDemo.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				DEVELOPMENT_TEAM = 4VS8SA23V9;
@@ -312,6 +403,7 @@
 				FF76AD051F43CCCC00347273 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

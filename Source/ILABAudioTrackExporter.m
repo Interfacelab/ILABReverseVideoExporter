@@ -7,6 +7,8 @@
 
 #import "ILABAudioTrackExporter.h"
 
+@import Accelerate;
+
 @interface ILABAudioTrackExporter() {
     AVMutableComposition *audioComp;
     
@@ -44,9 +46,9 @@
         
         dispatchGroup=dispatch_group_create();
         
-        AVMutableComposition *comp = [AVMutableComposition composition];
+        audioComp = [AVMutableComposition composition];
         for(AVAssetTrack *track in [sourceAsset tracksWithMediaType:AVMediaTypeAudio]) {
-            AVMutableCompositionTrack *atrack = [comp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+            AVMutableCompositionTrack *atrack = [audioComp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
             [atrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration) ofTrack:track atTime:kCMTimeZero error:nil];
         }
     }
@@ -69,7 +71,7 @@
     
     NSArray *audioTracks=[audioComp tracksWithMediaType:AVMediaTypeAudio];
     if (_trackIndex>=audioTracks.count) {
-        lastError = [NSError reverseVideoExportSessionError:ILABAudioTrackExporterInvalidTrackIndex];
+        lastError = [NSError reverseVideoExportSessionError:ILABAudioTrackExporterInvalidTrackIndexError];
         return nil;
     }
     
@@ -104,7 +106,7 @@
     assetWriter = [[AVAssetWriter alloc] initWithURL:exportURL fileType:AVFileTypeWAVE error:&localError];
     if (localError) {
         lastError = localError;
-        return nil;
+        return NO;
     }
     
     trackOutput=[self createReaderOutput];
@@ -117,7 +119,7 @@
     if ([assetReader canAddOutput:trackOutput]) {
         [assetReader addOutput:trackOutput];
     } else {
-        lastError = [NSError reverseVideoExportSessionError:ILABAudioTrackExporterCannotAddInput];
+        lastError = [NSError reverseVideoExportSessionError:ILABAudioTrackExporterCannotAddInputError];
         return NO;
     }
     
@@ -188,7 +190,7 @@
                 }
                 
                 // CFRelease not necessary?
-//                CFRelease(sampleBuffer);
+                CFRelease(sampleBuffer);
             } else {
                 completedOrFailed = YES;
             }
@@ -229,7 +231,7 @@
 -(void)exportToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock {
     if (_exporting) {
         if (completeBlock) {
-            completeBlock(NO, [NSError reverseVideoExportSessionError:ILABAudioTrackExporterExportInProgress]);
+            completeBlock(NO, [NSError reverseVideoExportSessionError:ILABAudioTrackExporterExportInProgressError]);
         }
         
         return;
@@ -262,6 +264,154 @@
     if (completeBlock) {
         completeBlock(result, lastError);
     }
+}
+
+-(void)exportReverseToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock {
+    NSURL *exportAudioURL = [[outputURL URLByDeletingLastPathComponent] URLByAppendingPathComponent:@"exported-audio.wav"];
+    [self exportToURL:exportAudioURL complete:^(BOOL complete, NSError *error) {
+        if (!complete) {
+            if (completeBlock) {
+                completeBlock(complete, error);
+            }
+            
+            return;
+        }
+        
+        OSStatus theErr = noErr;
+        
+        // set up input file
+        AudioFileID inputAudioFile;
+        theErr = AudioFileOpenURL((__bridge CFURLRef)exportAudioURL, kAudioFileReadPermission, 0, &inputAudioFile);
+        if (theErr != noErr) {
+            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        AudioStreamBasicDescription theFileFormat;
+        UInt32 thePropertySize = sizeof(theFileFormat);
+        theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyDataFormat, &thePropertySize, &theFileFormat);
+        if (theErr != noErr) {
+            AudioFileClose(inputAudioFile);
+            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        UInt64 fileDataSize = 0;
+        thePropertySize = sizeof(fileDataSize);
+        theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyAudioDataByteCount, &thePropertySize, &fileDataSize);
+        if (theErr != noErr) {
+            AudioFileClose(inputAudioFile);
+            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        AudioFileID outputAudioFile;
+        theErr=AudioFileCreateWithURL((__bridge CFURLRef)outputURL,
+                                      kAudioFileWAVEType,
+                                      &theFileFormat,
+                                      kAudioFileFlags_EraseFile,
+                                      &outputAudioFile);
+        if (theErr != noErr) {
+            AudioFileClose(inputAudioFile);
+            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        UInt64 dataSize = fileDataSize;
+        SInt32* theData = malloc((UInt32)dataSize);
+        
+        if (theData == NULL) {
+            // TODO: Set lastError to "Could not allocate audio pointer"
+            AudioFileClose(inputAudioFile);
+            AudioFileClose(outputAudioFile);
+
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        
+        UInt32 bytesRead=(UInt32)dataSize;
+        theErr = AudioFileReadBytes(inputAudioFile, false, 0, &bytesRead, theData);
+        if (theErr != noErr) {
+            AudioFileClose(inputAudioFile);
+            AudioFileClose(outputAudioFile);
+            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        Float32 *floatData=malloc((UInt32)dataSize);
+        if (floatData == NULL) {
+            free(theData);
+            
+            // TODO: Set lastError to "Could not allocate audio pointer"
+            AudioFileClose(inputAudioFile);
+            AudioFileClose(outputAudioFile);
+            
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        vDSP_vflt32((const int *)theData, 1, floatData, 1, (UInt32)dataSize/sizeof(Float32));
+        vDSP_vrvrs(floatData, 1, (UInt32)dataSize/sizeof(Float32));
+        vDSP_vfix32(floatData, 1, (int *)theData, 1, (UInt32)dataSize/sizeof(Float32));
+        
+        UInt32 bytesWritten=(UInt32)dataSize;
+        theErr=AudioFileWriteBytes(outputAudioFile, false, 0, &bytesWritten, theData);
+        if (theErr != noErr) {
+            free(theData);
+            free(floatData);
+            
+            AudioFileClose(inputAudioFile);
+            AudioFileClose(outputAudioFile);
+            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+
+            if (completeBlock) {
+                completeBlock(NO, lastError);
+            }
+            
+            return;
+        }
+        
+        free(theData);
+        free(floatData);
+        AudioFileClose(inputAudioFile);
+        AudioFileClose(outputAudioFile);
+        
+        [[NSFileManager defaultManager] removeItemAtURL:exportAudioURL error:nil];
+        
+        if (completeBlock) {
+            completeBlock(YES, nil);
+        }
+    }];
 }
 
 @end

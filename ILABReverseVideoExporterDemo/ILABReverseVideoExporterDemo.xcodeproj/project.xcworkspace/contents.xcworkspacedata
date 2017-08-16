@@ -2,6 +2,6 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "self:ILABReverseVideoExportSession.xcodeproj">
+      location = "self:ILABReverseVideoExporterDemo.xcodeproj">
    </FileRef>
 </Workspace>

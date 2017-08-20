@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = "ILABReverseVideoExporter"
-  s.version          = "0.1.1"
+  s.version          = "0.1.2"
   s.summary          = "Utility class for exporting reversed AVAssets.  Based on CSVideoReverse by Chris Sung."
   s.homepage         = "https://github.com/interfacelab/ILABReverseVideoExporter"
   s.license          = { :type => "MIT", :file => "LICENSE" }

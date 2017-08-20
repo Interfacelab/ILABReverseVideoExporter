@@ -40,6 +40,16 @@
  */
 -(instancetype)initWithURL:(NSURL *)sourceVideoURL;
 
+
+
+/**
+ Creates a new instance
+
+ @param sourceAsset The source AVAsset to reverse
+ @return The new instance
+ */
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset;
+
 /**
  Creates a new export session
 
@@ -48,6 +58,16 @@
  @return The new instance
  */
 +(instancetype)exportSessionWithURL:(NSURL *)sourceVideoURL outputURL:(NSURL *)outputURL;
+
+
+/**
+ Creates a new export session
+ 
+ @param sourceAsset The source AVAsset to reverse
+ @param outputURL URL to output reverse video to
+ @return The new instance
+ */
++(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset outputURL:(NSURL *)outputURL;
 
 /**
  Start the export process asynchronously

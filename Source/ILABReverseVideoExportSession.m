@@ -15,10 +15,7 @@
 #pragma mark - ILABReverseVideoExportSession
 
 @interface ILABReverseVideoExportSession() {
-    AVURLAsset *sourceAsset;
-    
-    NSURL *inputURL;
-    
+    AVAsset *sourceAsset;
     NSError *lastError;
 }
 @end
@@ -28,13 +25,10 @@
 
 #pragma mark - Init/Dealloc
 
--(instancetype)initWithURL:(NSURL *)sourceVideoURL {
-    if ((self = [super init])){
-        if (![[NSFileManager defaultManager] fileExistsAtPath:sourceVideoURL.path]) {
-            [NSException raise:@"Invalid input file." format:@"The file '%@' could not be located.", sourceVideoURL.path];
-        }
-
-        inputURL = sourceVideoURL;
+-(instancetype)initWithAsset:(AVAsset *)sourceAVAsset {
+    if ((self = [super init])) {
+        
+        sourceAsset = sourceAVAsset;
         
         _samplesPerPass = 100;
         
@@ -58,8 +52,6 @@
                                  AVLinearPCMIsFloatKey: @(YES)
                                  };
         
-        sourceAsset = [AVURLAsset assetWithURL:sourceVideoURL];
-
         dispatch_semaphore_t loadSemi = dispatch_semaphore_create(0);
         __weak typeof(self) weakSelf = self;
         [sourceAsset loadValuesAsynchronouslyForKeys:@[@"duration",@"tracks", @"metadata"] completionHandler:^{
@@ -74,7 +66,7 @@
                 }
                 
                 AVAssetTrack *t=[strongSelf->sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
-
+                
                 strongSelf->_sourceDuration = strongSelf->sourceAsset.duration;
                 strongSelf->_sourceVideoTracks = [strongSelf->sourceAsset tracksWithMediaType:AVMediaTypeVideo].count;
                 strongSelf->_sourceAudioTracks = [strongSelf->sourceAsset tracksWithMediaType:AVMediaTypeAudio].count;
@@ -96,13 +88,29 @@
         while(dispatch_semaphore_wait(loadSemi, DISPATCH_TIME_NOW)) {
             [[NSRunLoop mainRunLoop] runUntilDate:[NSDate date]];
         }
+        
     }
     
     return self;
 }
 
+-(instancetype)initWithURL:(NSURL *)sourceVideoURL {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:sourceVideoURL.path]) {
+        [NSException raise:@"Invalid input file." format:@"The file '%@' could not be located.", sourceVideoURL.path];
+    }
+
+    return [self initWithAsset:[AVURLAsset assetWithURL:sourceVideoURL]];
+}
+
 +(instancetype)exportSessionWithURL:(NSURL *)sourceVideoURL outputURL:(NSURL *)outputURL {
     ILABReverseVideoExportSession *session = [[[self class] alloc] initWithURL:sourceVideoURL];
+    session.outputURL = outputURL;
+    
+    return session;
+}
+
++(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset outputURL:(NSURL *)outputURL {
+    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset];
     session.outputURL = outputURL;
     
     return session;

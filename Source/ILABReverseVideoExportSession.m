@@ -12,6 +12,15 @@
 @import Accelerate;
 @import CoreAudio;
 
+/**
+ Block for getting results from asynchronous methods that would normally return an AVAsset instance
+ 
+ @param complete YES if complete, NO if not
+ @param asset The AVAsset, nil if not complete
+ @param error The NSError if any
+ */
+typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *error);
+
 #pragma mark - ILABReverseVideoExportSession
 
 @interface ILABReverseVideoExportSession() {
@@ -128,6 +137,16 @@
     return exportQueue;
 }
 
++(dispatch_queue_t)generateQueue {
+    static dispatch_queue_t generateQueue = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        generateQueue = dispatch_queue_create("reverse video generate queue", NULL);
+    });
+    
+    return generateQueue;
+}
+
 #pragma mark - Properties
 
 -(NSTimeInterval)sourceDurationSeconds {
@@ -169,15 +188,30 @@
 }
 
 -(void)doExportAsynchronously:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
-
+    __weak typeof(self) weakSelf = self;
     NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
 
     // Reverse the primary audio track
-    AVAsset *reversedAudioAsset = nil;
+    __block AVAsset *reversedAudioAsset = nil;
     NSURL *reversedAudioPath = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-reversed-audio.wav",[[NSUUID UUID] UUIDString]]];
     if (!_skipAudio && (_sourceAudioTracks > 0)) {
         NSLog(@"Reversed Audio: %@", reversedAudioPath.path);
-        reversedAudioAsset = [self exportReversedAudio:reversedAudioPath];
+        dispatch_semaphore_t revAudio = dispatch_semaphore_create(0);
+        [self exportReversedAudio:reversedAudioPath results:^(BOOL complete, AVAsset *asset, NSError *error) {
+            if (weakSelf) {
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (complete) {
+                    reversedAudioAsset = asset;
+                } else if (error) {
+                    strongSelf->lastError = error;
+                }
+            }
+            
+            dispatch_semaphore_signal(revAudio);
+        }];
+        
+        dispatch_semaphore_wait(revAudio, DISPATCH_TIME_FOREVER);
+        
         if (!reversedAudioAsset) {
             if (completeBlock) {
                 completeBlock(NO, lastError);
@@ -190,70 +224,75 @@
     // Reverse the primary video track
     NSURL *reversedVideoPath = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-reversed-video.mov",[[NSUUID UUID] UUIDString]]];
     NSLog(@"Reversed Video: %@", reversedVideoPath.path);
-    AVAsset *reversedVideoAsset = [self exportReversedVideo:reversedVideoPath progress:progressBlock];
-    if (!reversedVideoAsset) {
-        if (completeBlock) {
-            completeBlock(NO, lastError);
-        }
-        
-        return;
-    }
-    
-    // Mux the tracks together
-    if (reversedAudioAsset) {
-        AVMutableComposition *muxComp = [AVMutableComposition composition];
-        
-        AVMutableCompositionTrack *compVideoTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-        AVMutableCompositionTrack *compAudioTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-        
-        AVAssetTrack *videoTrack = [reversedVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
-        AVAssetTrack *audioTrack = [reversedAudioAsset tracksWithMediaType:AVMediaTypeAudio].firstObject;
 
-        compVideoTrack.preferredTransform = videoTrack.preferredTransform;
-        
-        [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, reversedVideoAsset.duration) ofTrack:videoTrack atTime:kCMTimeZero error:nil];
-        [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, reversedAudioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
-        
-        AVAssetExportSession *exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp presetName:AVAssetExportPresetPassthrough];
-        exportSession.outputURL = _outputURL;
-        exportSession.outputFileType = AVFileTypeQuickTimeMovie;
-
-        lastError = nil;
-        dispatch_semaphore_t exportSemi = dispatch_semaphore_create(0);
-
-        if (progressBlock) {
-            [self updateProgressBlock:progressBlock
-                            operation:@"Finishing Up"
-                             progress:INFINITY];
-        }
-
-        [exportSession exportAsynchronouslyWithCompletionHandler:^{
-            if (exportSession.status != AVAssetExportSessionStatusCompleted) {
-                lastError = exportSession.error;
-            }
-            
-            dispatch_semaphore_signal(exportSemi);
-        }];
-        
-        while(dispatch_semaphore_wait(exportSemi, DISPATCH_TIME_NOW)) {
-            [[NSRunLoop mainRunLoop] runUntilDate:[NSDate date]];
-        }
-        
-        if (completeBlock) {
-            completeBlock((lastError == nil), lastError);
-        }
-        
-    } else {
-        NSError *error = nil;
-        [[NSFileManager defaultManager] moveItemAtURL:reversedVideoPath toURL:_outputURL error:&error];
-        if (error) {
+    [self exportReversedVideo:reversedVideoPath progress:progressBlock results:^(BOOL complete, AVAsset *asset, NSError *error) {
+        if (!asset) {
             if (completeBlock) {
                 completeBlock(NO, error);
             }
             
             return;
         }
-    }
+
+        if (weakSelf) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            AVAsset *reversedVideoAsset = asset;
+            
+            // Mux the tracks together
+            if (reversedAudioAsset) {
+                AVMutableComposition *muxComp = [AVMutableComposition composition];
+                
+                AVMutableCompositionTrack *compVideoTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+                AVMutableCompositionTrack *compAudioTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+                
+                AVAssetTrack *videoTrack = [reversedVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
+                AVAssetTrack *audioTrack = [reversedAudioAsset tracksWithMediaType:AVMediaTypeAudio].firstObject;
+                
+                compVideoTrack.preferredTransform = videoTrack.preferredTransform;
+                
+                [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, reversedVideoAsset.duration) ofTrack:videoTrack atTime:kCMTimeZero error:nil];
+                [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, reversedAudioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
+                
+                AVAssetExportSession *exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp presetName:AVAssetExportPresetPassthrough];
+                exportSession.outputURL = strongSelf->_outputURL;
+                exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+                
+                strongSelf->lastError = nil;
+                dispatch_semaphore_t exportSemi = dispatch_semaphore_create(0);
+                
+                if (progressBlock) {
+                    [strongSelf updateProgressBlock:progressBlock
+                                    operation:@"Finishing Up"
+                                     progress:INFINITY];
+                }
+                
+                [exportSession exportAsynchronouslyWithCompletionHandler:^{
+                    if (weakSelf) {
+                        __strong typeof(weakSelf) strongSelf = weakSelf;
+                        if (exportSession.status != AVAssetExportSessionStatusCompleted) {
+                            strongSelf->lastError = exportSession.error;
+                        }
+                        
+                        if (completeBlock) {
+                            completeBlock((strongSelf->lastError == nil), strongSelf->lastError);
+                        }
+                    }
+                }];
+            } else {
+                NSError *error = nil;
+                [[NSFileManager defaultManager] moveItemAtURL:reversedVideoPath toURL:strongSelf->_outputURL error:&error];
+                if (error) {
+                    if (completeBlock) {
+                        completeBlock(NO, error);
+                    }
+                } else {
+                    if (completeBlock) {
+                        completeBlock((strongSelf->lastError == nil), strongSelf->lastError);
+                    }
+                }
+            }
+        }
+    }];
 }
 
 #pragma mark - Reverse Methods
@@ -268,109 +307,144 @@
     });
 }
 
--(AVAsset *)exportReversedAudio:(NSURL *)reversedAudioPath {
-    ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:sourceAsset trackIndex:0];
-    
-    dispatch_semaphore_t audioExportSemi = dispatch_semaphore_create(0);
-    
-    __block BOOL audioExported = NO;
+-(void)exportReversedAudio:(NSURL *)reversedAudioPath results:(ILABGenerateAssetBlock)resultsBlock {
     __weak typeof(self) weakSelf = self;
-    [audioExporter exportReverseToURL:reversedAudioPath complete:^(BOOL complete, NSError *error) {
-        if (error) {
-            NSLog(@"Audio export error: %@", error.localizedDescription);
+    dispatch_async([[self class] generateQueue], ^{
+        if (weakSelf) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:sourceAsset trackIndex:0];
             
-            if (weakSelf) {
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                strongSelf->lastError = error;
+            dispatch_semaphore_t audioExportSemi = dispatch_semaphore_create(0);
+            
+            __block BOOL audioExported = NO;
+            [audioExporter exportReverseToURL:reversedAudioPath complete:^(BOOL complete, NSError *error) {
+                if (error) {
+                    NSLog(@"Audio export error: %@", error.localizedDescription);
+                    
+                    if (weakSelf) {
+                        __strong typeof(weakSelf) strongSelf = weakSelf;
+                        strongSelf->lastError = error;
+                    }
+                }
+                
+                audioExported = complete;
+                
+                dispatch_semaphore_signal(audioExportSemi);
+            }];
+            
+            dispatch_semaphore_wait(audioExportSemi, DISPATCH_TIME_FOREVER);
+            
+            if (audioExported) {
+                resultsBlock(YES, [AVURLAsset assetWithURL:reversedAudioPath], nil);
+            } else {
+                resultsBlock(NO, nil, strongSelf->lastError);
             }
+        } else {
+            resultsBlock(NO, nil, nil);
         }
-        
-        audioExported = complete;
-        
-        dispatch_semaphore_signal(audioExportSemi);
-    }];
-    
-    while(dispatch_semaphore_wait(audioExportSemi, DISPATCH_TIME_NOW)) {
-        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate date]];
-    }
-    
-    if (audioExported) {
-        return [AVURLAsset assetWithURL:reversedAudioPath];
-    } else {
-        return nil;
-    }
+    });
 }
 
--(AVAsset *)exportReversedVideo:(NSURL *)reversedVideoPath progress:(ILABProgressBlock)progressBlock {
-    // Setup the reader
-    NSError *error = nil;
-    AVAssetReader *assetReader = [AVAssetReader assetReaderWithAsset:sourceAsset error:&error];
-    if (error) {
-        lastError = error;
-        return nil;
-    }
-
-    // Setup the reader output
-    AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:[sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject outputSettings:@{ (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) }];
-    assetReaderOutput.supportsRandomAccess = YES;
-    [assetReader addOutput:assetReaderOutput];
-    if (![assetReader startReading]) {
-        lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionUnableToStartReaderError];
-        return nil;
-    }
-    
-    // Fetch the sample times for the source video
-    NSMutableArray<NSValue *> *revSampleTimes = [NSMutableArray new];
-    CMSampleBufferRef sample;
-    NSInteger localCount = 0;
-    while ((sample = [assetReaderOutput copyNextSampleBuffer])) {
-        CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sample);
-        [revSampleTimes addObject:[NSValue valueWithCMTime:presentationTime]];
+-(void)exportReversedVideo:(NSURL *)reversedVideoPath progress:(ILABProgressBlock)progressBlock results:(ILABGenerateAssetBlock)resultsBlock {
+    __weak typeof(self) weakSelf = self;
+    dispatch_async([[self class] generateQueue], ^{
         
-        if (progressBlock) {
-            [self updateProgressBlock:progressBlock
-                            operation:@"Analyzing Source Video"
-                             progress:(CMTimeGetSeconds(presentationTime) / CMTimeGetSeconds(_sourceDuration)) * 0.5];
-        }
-        
-        CFRelease(sample);
-        sample = NULL;
-
-        localCount++;
-    }
-    
-    // No samples, no bueno
-    if (revSampleTimes.count == 0) {
-        lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionNoSamplesError];
-        return nil;
-    }
-    
-    // Generate the pass data
-    NSMutableArray *passDicts = [NSMutableArray new];
-    
-    CMTime initEventTime = revSampleTimes.firstObject.CMTimeValue;
-    CMTime passStartTime = initEventTime;
-    CMTime passEndTime = initEventTime;
-    CMTime timeEventTime = initEventTime;
-    
-    NSInteger timeStartIndex = -1;
-    NSInteger timeEndIndex = -1;
-    NSInteger frameStartIndex = -1;
-    NSInteger frameEndIndex = -1;
-
-    NSInteger totalPasses = ceil((float)revSampleTimes.count / (float)_samplesPerPass);
-    
-    BOOL initNewPass = NO;
-    for(NSInteger i=0; i<revSampleTimes.count; i++) {
-        timeEventTime = revSampleTimes[i].CMTimeValue;
-        
-        timeEndIndex = i;
-        frameEndIndex = (revSampleTimes.count - 1) - i;
-        
-        passEndTime = timeEventTime;
-        
-        if (i % _samplesPerPass == 0) {
-            if (i > 0) {
+        if (weakSelf) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            // Setup the reader
+            NSError *error = nil;
+            AVAssetReader *assetReader = [AVAssetReader assetReaderWithAsset:strongSelf->sourceAsset error:&error];
+            if (error) {
+                strongSelf->lastError = error;
+                resultsBlock(NO, nil, error);
+                return;
+            }
+            
+            // Setup the reader output
+            AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:[strongSelf->sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject outputSettings:@{ (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) }];
+            assetReaderOutput.supportsRandomAccess = YES;
+            [assetReader addOutput:assetReaderOutput];
+            if (![assetReader startReading]) {
+                strongSelf->lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionUnableToStartReaderError];
+                resultsBlock(NO, nil, strongSelf->lastError);
+                return;
+            }
+            
+            // Fetch the sample times for the source video
+            NSMutableArray<NSValue *> *revSampleTimes = [NSMutableArray new];
+            CMSampleBufferRef sample;
+            NSInteger localCount = 0;
+            while ((sample = [assetReaderOutput copyNextSampleBuffer])) {
+                CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sample);
+                [revSampleTimes addObject:[NSValue valueWithCMTime:presentationTime]];
+                
+                if (progressBlock) {
+                    [strongSelf updateProgressBlock:progressBlock
+                                    operation:@"Analyzing Source Video"
+                                     progress:(CMTimeGetSeconds(presentationTime) / CMTimeGetSeconds(strongSelf->_sourceDuration)) * 0.5];
+                }
+                
+                CFRelease(sample);
+                sample = NULL;
+                
+                localCount++;
+            }
+            
+            // No samples, no bueno
+            if (revSampleTimes.count == 0) {
+                strongSelf->lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionNoSamplesError];
+                resultsBlock(NO, nil, strongSelf->lastError);
+                return;
+            }
+            
+            // Generate the pass data
+            NSMutableArray *passDicts = [NSMutableArray new];
+            
+            CMTime initEventTime = revSampleTimes.firstObject.CMTimeValue;
+            CMTime passStartTime = initEventTime;
+            CMTime passEndTime = initEventTime;
+            CMTime timeEventTime = initEventTime;
+            
+            NSInteger timeStartIndex = -1;
+            NSInteger timeEndIndex = -1;
+            NSInteger frameStartIndex = -1;
+            NSInteger frameEndIndex = -1;
+            
+            NSInteger totalPasses = ceil((float)revSampleTimes.count / (float)strongSelf->_samplesPerPass);
+            
+            BOOL initNewPass = NO;
+            for(NSInteger i=0; i<revSampleTimes.count; i++) {
+                timeEventTime = revSampleTimes[i].CMTimeValue;
+                
+                timeEndIndex = i;
+                frameEndIndex = (revSampleTimes.count - 1) - i;
+                
+                passEndTime = timeEventTime;
+                
+                if (i % strongSelf->_samplesPerPass == 0) {
+                    if (i > 0) {
+                        [passDicts addObject:@{
+                                               @"passStartTime": [NSValue valueWithCMTime:passStartTime],
+                                               @"passEndTime": [NSValue valueWithCMTime:passEndTime],
+                                               @"timeStartIndex": @(timeStartIndex),
+                                               @"timeEndIndex": @(timeEndIndex),
+                                               @"frameStartIndex": @(frameStartIndex),
+                                               @"frameEndIndex": @(frameEndIndex)
+                                               }];
+                    }
+                    
+                    initNewPass = YES;
+                }
+                
+                if (initNewPass) {
+                    passStartTime = timeEventTime;
+                    timeStartIndex = i;
+                    frameStartIndex = ((revSampleTimes.count - 1) - i);
+                    initNewPass = NO;
+                }
+            }
+            
+            if ((passDicts.count < totalPasses) || ((revSampleTimes.count % strongSelf->_samplesPerPass) != 0)) {
                 [passDicts addObject:@{
                                        @"passStartTime": [NSValue valueWithCMTime:passStartTime],
                                        @"passEndTime": [NSValue valueWithCMTime:passEndTime],
@@ -381,146 +455,121 @@
                                        }];
             }
             
-            initNewPass = YES;
-        }
-        
-        if (initNewPass) {
-            passStartTime = timeEventTime;
-            timeStartIndex = i;
-            frameStartIndex = ((revSampleTimes.count - 1) - i);
-            initNewPass = NO;
-        }
-    }
-    
-    if ((passDicts.count < totalPasses) || ((revSampleTimes.count % _samplesPerPass) != 0)) {
-        [passDicts addObject:@{
-                               @"passStartTime": [NSValue valueWithCMTime:passStartTime],
-                               @"passEndTime": [NSValue valueWithCMTime:passEndTime],
-                               @"timeStartIndex": @(timeStartIndex),
-                               @"timeEndIndex": @(timeEndIndex),
-                               @"frameStartIndex": @(frameStartIndex),
-                               @"frameEndIndex": @(frameEndIndex)
-                               }];
-    }
-    
-    
-    // Create the writer
-    AVAssetWriter *assetWriter = [AVAssetWriter assetWriterWithURL:reversedVideoPath fileType:AVFileTypeQuickTimeMovie error:&error];
-    if (error) {
-        lastError = error;
-        
-        return nil;
-    }
-    
-    // Create the writer input and adaptor
-    NSMutableDictionary *outputSettings = [_videoOutputSettings mutableCopy];
-    if (!outputSettings[AVVideoCodecKey]) {
-        outputSettings[AVVideoCodecKey] = AVVideoCodecH264;
-    }
-    if (!outputSettings[AVVideoWidthKey]) {
-        outputSettings[AVVideoWidthKey] = @((_sourceSize.width<_sourceSize.height) ? _sourceSize.height : _sourceSize.width);
-    }
-    if (!outputSettings[AVVideoHeightKey]) {
-        outputSettings[AVVideoHeightKey] = @((_sourceSize.width<_sourceSize.height) ? _sourceSize.width : _sourceSize.height);
-    }
-    
-    AVAssetWriterInput *assetWriterInput =[AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:outputSettings];
-    assetWriterInput.expectsMediaDataInRealTime = NO;
-    assetWriterInput.transform = _sourceTransform;
-    
-    AVAssetWriterInputPixelBufferAdaptor *adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:assetWriterInput sourcePixelBufferAttributes:nil];
-    [assetWriter addInput:assetWriterInput];
-    
-    // Start writing
-    if (![assetWriter startWriting]) {
-        lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionUnableToStartWriterError];
-        return nil;
-    }
-    [assetWriter startSessionAtSourceTime:initEventTime];
-    
-    NSInteger frameCount = 0;
-    for(NSInteger z=passDicts.count - 1; z>=0; z--) {
-        NSDictionary *dict = passDicts[z];
-        
-        passStartTime = [dict[@"passStartTime"] CMTimeValue];
-        passEndTime = [dict[@"passEndTime"] CMTimeValue];
-        
-        CMTime passDuration = CMTimeSubtract(passEndTime, passStartTime);
-        
-        timeStartIndex = [dict[@"timeStartIndex"] longValue];
-        timeEndIndex = [dict[@"timeEndIndex"] longValue];
-
-        frameStartIndex = [dict[@"frameStartIndex"] longValue];
-        frameEndIndex = [dict[@"frameEndIndex"] longValue];
-        
-        while((sample = [assetReaderOutput copyNextSampleBuffer])) {
-            CFRelease(sample);
-        }
-        
-        [assetReaderOutput resetForReadingTimeRanges:@[[NSValue valueWithCMTimeRange:CMTimeRangeMake(passStartTime, passDuration)]]];
-        
-        NSMutableArray *samples = [NSMutableArray new];
-        while((sample = [assetReaderOutput copyNextSampleBuffer])) {
-            [samples addObject:(__bridge id)sample];
-            CFRelease(sample);
-        }
-        
-        for(NSInteger i=0; i<samples.count; i++) {
-            if (frameCount >= revSampleTimes.count) {
-                break;
+            
+            // Create the writer
+            AVAssetWriter *assetWriter = [AVAssetWriter assetWriterWithURL:reversedVideoPath fileType:AVFileTypeQuickTimeMovie error:&error];
+            if (error) {
+                strongSelf->lastError = error;
+                resultsBlock(NO, nil, strongSelf->lastError);
+                return;
             }
             
-            CMTime eventTime = revSampleTimes[frameCount].CMTimeValue;
+            // Create the writer input and adaptor
+            NSMutableDictionary *outputSettings = [strongSelf->_videoOutputSettings mutableCopy];
+            if (!outputSettings[AVVideoCodecKey]) {
+                outputSettings[AVVideoCodecKey] = AVVideoCodecH264;
+            }
+            if (!outputSettings[AVVideoWidthKey]) {
+                outputSettings[AVVideoWidthKey] = @((strongSelf->_sourceSize.width<strongSelf->_sourceSize.height) ? strongSelf->_sourceSize.height : strongSelf->_sourceSize.width);
+            }
+            if (!outputSettings[AVVideoHeightKey]) {
+                outputSettings[AVVideoHeightKey] = @((strongSelf->_sourceSize.width<strongSelf->_sourceSize.height) ? strongSelf->_sourceSize.width : strongSelf->_sourceSize.height);
+            }
             
-            CVPixelBufferRef imageBufferRef = CMSampleBufferGetImageBuffer((__bridge  CMSampleBufferRef)samples[(samples.count - 1) - i]);
+            AVAssetWriterInput *assetWriterInput =[AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:outputSettings];
+            assetWriterInput.expectsMediaDataInRealTime = NO;
+            assetWriterInput.transform = strongSelf->_sourceTransform;
             
-            BOOL didAppend = NO;
-            NSInteger missCount = 0;
-            while(!didAppend && (missCount <= 45)) {
-                if (adaptor.assetWriterInput.readyForMoreMediaData) {
-                    didAppend = [adaptor appendPixelBuffer:imageBufferRef withPresentationTime:eventTime];
-                    if (!didAppend) {
-                        lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionUnableToWriteFrameError];
-                        return nil;
-                    }
-                } else {
-                    [NSThread sleepForTimeInterval:1. / 30.];
+            AVAssetWriterInputPixelBufferAdaptor *adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:assetWriterInput sourcePixelBufferAttributes:nil];
+            [assetWriter addInput:assetWriterInput];
+            
+            // Start writing
+            if (![assetWriter startWriting]) {
+                strongSelf->lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionUnableToStartWriterError];
+                resultsBlock(NO, nil, strongSelf->lastError);
+                return;
+            }
+            [assetWriter startSessionAtSourceTime:initEventTime];
+            
+            NSInteger frameCount = 0;
+            for(NSInteger z=passDicts.count - 1; z>=0; z--) {
+                NSDictionary *dict = passDicts[z];
+                
+                passStartTime = [dict[@"passStartTime"] CMTimeValue];
+                passEndTime = [dict[@"passEndTime"] CMTimeValue];
+                
+                CMTime passDuration = CMTimeSubtract(passEndTime, passStartTime);
+                
+                timeStartIndex = [dict[@"timeStartIndex"] longValue];
+                timeEndIndex = [dict[@"timeEndIndex"] longValue];
+                
+                frameStartIndex = [dict[@"frameStartIndex"] longValue];
+                frameEndIndex = [dict[@"frameEndIndex"] longValue];
+                
+                while((sample = [assetReaderOutput copyNextSampleBuffer])) {
+                    CFRelease(sample);
                 }
                 
-                missCount++;
+                [assetReaderOutput resetForReadingTimeRanges:@[[NSValue valueWithCMTimeRange:CMTimeRangeMake(passStartTime, passDuration)]]];
+                
+                NSMutableArray *samples = [NSMutableArray new];
+                while((sample = [assetReaderOutput copyNextSampleBuffer])) {
+                    [samples addObject:(__bridge id)sample];
+                    CFRelease(sample);
+                }
+                
+                for(NSInteger i=0; i<samples.count; i++) {
+                    if (frameCount >= revSampleTimes.count) {
+                        break;
+                    }
+                    
+                    CMTime eventTime = revSampleTimes[frameCount].CMTimeValue;
+                    
+                    CVPixelBufferRef imageBufferRef = CMSampleBufferGetImageBuffer((__bridge  CMSampleBufferRef)samples[(samples.count - 1) - i]);
+                    
+                    BOOL didAppend = NO;
+                    NSInteger missCount = 0;
+                    while(!didAppend && (missCount <= 45)) {
+                        if (adaptor.assetWriterInput.readyForMoreMediaData) {
+                            didAppend = [adaptor appendPixelBuffer:imageBufferRef withPresentationTime:eventTime];
+                            if (!didAppend) {
+                                strongSelf->lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionUnableToWriteFrameError];
+                                resultsBlock(NO, nil, strongSelf->lastError);
+                                return;
+                            }
+                        } else {
+                            [NSThread sleepForTimeInterval:1. / 30.];
+                        }
+                        
+                        missCount++;
+                    }
+                    
+                    frameCount++;
+                    
+                    if(progressBlock) {
+                        [strongSelf updateProgressBlock:progressBlock
+                                        operation:@"Reversing Video"
+                                         progress:0.5 + (((float)frameCount/(float)revSampleTimes.count) * 0.5)];
+                    }
+                }
+                
+                samples = nil;
             }
             
-            frameCount++;
+            [assetWriterInput markAsFinished];
             
-            if(progressBlock) {
-                [self updateProgressBlock:progressBlock
-                                operation:@"Reversing Video"
-                                 progress:0.5 + ((float)frameCount/(float)revSampleTimes.count)];
+            if (progressBlock) {
+                [strongSelf updateProgressBlock:progressBlock
+                                operation:@"Saving Reversed Video"
+                                 progress:INFINITY];
             }
+            
+            [assetWriter finishWritingWithCompletionHandler:^{
+                resultsBlock(YES, [AVURLAsset assetWithURL:reversedVideoPath], nil);
+            }];
         }
-        
-        samples = nil;
-    }
-    
-    [assetWriterInput markAsFinished];
-    
-    dispatch_semaphore_t finishSemi = dispatch_semaphore_create(0);
-    
-    if (progressBlock) {
-        [self updateProgressBlock:progressBlock
-                        operation:@"Saving Reversed Video"
-                         progress:INFINITY];
-    }
 
-    [assetWriter finishWritingWithCompletionHandler:^{
-        dispatch_semaphore_signal(finishSemi);
-    }];
-    
-    while(dispatch_semaphore_wait(finishSemi, DISPATCH_TIME_NOW)) {
-        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate date]];
-    }
-    
-    return [AVURLAsset assetWithURL:reversedVideoPath];
+    });
 }
 
 @end

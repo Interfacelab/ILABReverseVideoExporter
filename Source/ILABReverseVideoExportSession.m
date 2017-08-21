@@ -258,7 +258,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
                 exportSession.outputFileType = AVFileTypeQuickTimeMovie;
                 
                 strongSelf->lastError = nil;
-                dispatch_semaphore_t exportSemi = dispatch_semaphore_create(0);
                 
                 if (progressBlock) {
                     [strongSelf updateProgressBlock:progressBlock

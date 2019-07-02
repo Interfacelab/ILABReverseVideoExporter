@@ -25,8 +25,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
 
 @interface ILABReverseVideoExportSession() {
     AVAsset *sourceAsset;
+    AVAsset *videoAsset;
     NSError *lastError;
 }
+@property (nonatomic) CMTimeRange timeRange;
 @end
 
 
@@ -34,12 +36,16 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
 
 #pragma mark - Init/Dealloc
 
--(instancetype)initWithAsset:(AVAsset *)sourceAVAsset {
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset {
+    return [self initWithAsset:sourceAsset timeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration)];
+}
+
+-(instancetype)initWithAsset:(AVAsset *)sourceAVAsset timeRange:(CMTimeRange)timeRange {
     if ((self = [super init])) {
         
         sourceAsset = sourceAVAsset;
         
-        _samplesPerPass = 100;
+        _samplesPerPass = 5;
         
         _sourceVideoTracks = 0;
         _sourceAudioTracks = 0;
@@ -60,6 +66,16 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
                                  AVLinearPCMBitDepthKey: @(32),
                                  AVLinearPCMIsFloatKey: @(YES)
                                  };
+
+        AVAssetTrack *track = [sourceAVAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
+        
+        AVMutableComposition *videoComp = [AVMutableComposition composition];
+        AVMutableCompositionTrack *vTrack = [videoComp addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+        [vTrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
+        
+        videoAsset = videoComp;
+
+        self.timeRange = timeRange;
         
         dispatch_semaphore_t loadSemi = dispatch_semaphore_create(0);
         __weak typeof(self) weakSelf = self;
@@ -81,8 +97,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
                 strongSelf->_sourceAudioTracks = [strongSelf->sourceAsset tracksWithMediaType:AVMediaTypeAudio].count;
                 strongSelf->_sourceFPS = t.nominalFrameRate;
                 
-                _sourceTransform = t.preferredTransform;
-                if (_sourceTransform.a == 0 && _sourceTransform.d == 0 && (_sourceTransform.b == 1.0 || _sourceTransform.b == -1.0) && (_sourceTransform.c == 1.0 || _sourceTransform.c == -1.0)) {
+                strongSelf->_sourceTransform = t.preferredTransform;
+                if (strongSelf->_sourceTransform.a == 0 && strongSelf->_sourceTransform.d == 0 &&
+                    (strongSelf->_sourceTransform.b == 1.0 || strongSelf->_sourceTransform.b == -1.0) &&
+                    (strongSelf->_sourceTransform.c == 1.0 || strongSelf->_sourceTransform.c == -1.0)) {
                     strongSelf->_sourceSize = CGSizeMake(t.naturalSize.height, t.naturalSize.width);
                 } else {
                     strongSelf->_sourceSize = CGSizeMake(t.naturalSize.width, t.naturalSize.height);
@@ -97,7 +115,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
         while(dispatch_semaphore_wait(loadSemi, DISPATCH_TIME_NOW)) {
             [[NSRunLoop mainRunLoop] runUntilDate:[NSDate date]];
         }
-        
     }
     
     return self;
@@ -118,8 +135,8 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
     return session;
 }
 
-+(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset outputURL:(NSURL *)outputURL {
-    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset];
++(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL {
+    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange];
     session.outputURL = outputURL;
     
     return session;
@@ -311,7 +328,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
     dispatch_async([[self class] generateQueue], ^{
         if (weakSelf) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
-            ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:sourceAsset trackIndex:0];
+            ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:strongSelf->sourceAsset trackIndex:0 timeRange:strongSelf->_timeRange];
             
             dispatch_semaphore_t audioExportSemi = dispatch_semaphore_create(0);
             
@@ -352,7 +369,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
             __strong typeof(weakSelf) strongSelf = weakSelf;
             // Setup the reader
             NSError *error = nil;
-            AVAssetReader *assetReader = [AVAssetReader assetReaderWithAsset:strongSelf->sourceAsset error:&error];
+            AVAssetReader *assetReader = [AVAssetReader assetReaderWithAsset:strongSelf->videoAsset error:&error];
             if (error) {
                 strongSelf->lastError = error;
                 resultsBlock(NO, nil, error);
@@ -360,7 +377,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
             }
             
             // Setup the reader output
-            AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:[strongSelf->sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject outputSettings:@{ (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) }];
+            AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:[strongSelf->videoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject outputSettings:@{ (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) }];
             assetReaderOutput.supportsRandomAccess = YES;
             [assetReader addOutput:assetReaderOutput];
             if (![assetReader startReading]) {
@@ -368,7 +385,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
                 resultsBlock(NO, nil, strongSelf->lastError);
                 return;
             }
-            
+
             // Fetch the sample times for the source video
             NSMutableArray<NSValue *> *revSampleTimes = [NSMutableArray new];
             CMSampleBufferRef sample;
@@ -388,7 +405,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL complete, AVAsset *asset, NSError *er
                 
                 localCount++;
             }
-            
+
             // No samples, no bueno
             if (revSampleTimes.count == 0) {
                 strongSelf->lastError = [NSError reverseVideoExportSessionError:ILABReverseVideoExportSessionNoSamplesError];

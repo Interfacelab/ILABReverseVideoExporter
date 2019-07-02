@@ -32,6 +32,10 @@
 @implementation ILABAudioTrackExporter
 
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex {
+    return [self initWithAsset:sourceAsset trackIndex:0 timeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration)];
+}
+
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex timeRange:(CMTimeRange)timeRange {
     if ((self = [super init])) {
         lastError = nil;
         
@@ -49,7 +53,7 @@
         audioComp = [AVMutableComposition composition];
         for(AVAssetTrack *track in [sourceAsset tracksWithMediaType:AVMediaTypeAudio]) {
             AVMutableCompositionTrack *atrack = [audioComp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-            [atrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration) ofTrack:track atTime:kCMTimeZero error:nil];
+            [atrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
         }
     }
     
@@ -168,24 +172,29 @@
     
     __block BOOL audioFinished=NO;
     
+    __weak typeof(self) weakSelf = self;
+    
     dispatch_group_enter(dispatchGroup);
     
     // Specify the block to execute when the asset writer is ready for audio media data, and specify the queue to call it on.
     [writerInput requestMediaDataWhenReadyOnQueue:audioQueue usingBlock:^{
+        
         // Because the block is called asynchronously, check to see whether its task is complete.
         if (audioFinished)
             return;
         
+        ILABAudioTrackExporter *exporter = weakSelf;
+        
         BOOL completedOrFailed = NO;
         // If the task isn't complete yet, make sure that the input is actually ready for more media data.
-        while ([writerInput isReadyForMoreMediaData] && !completedOrFailed) {
+        while ([exporter->writerInput isReadyForMoreMediaData] && !completedOrFailed) {
             // Get the next audio sample buffer, and append it to the output file.
-            CMSampleBufferRef sampleBuffer = [trackOutput copyNextSampleBuffer];
+            CMSampleBufferRef sampleBuffer = [exporter->trackOutput copyNextSampleBuffer];
             if (sampleBuffer != NULL) {
                 if (![self processSampleBuffer:sampleBuffer]) {
                     completedOrFailed=YES;
                 } else {
-                    BOOL success = [writerInput appendSampleBuffer:sampleBuffer];
+                    BOOL success = [exporter->writerInput appendSampleBuffer:sampleBuffer];
                     completedOrFailed = !success;
                 }
                 
@@ -195,29 +204,32 @@
                 completedOrFailed = YES;
             }
         }
-
+        
         if (completedOrFailed) {
             // Mark the input as finished, but only if we haven't already done so, and then leave the dispatch group (since the audio work has finished).
             BOOL oldFinished = audioFinished;
             audioFinished = YES;
             if (oldFinished == NO) {
-                [writerInput markAsFinished];
+                [exporter->writerInput markAsFinished];
             }
             
-            dispatch_group_leave(dispatchGroup);
+            dispatch_group_leave(exporter->dispatchGroup);
         }
     }];
     
     dispatch_group_notify(dispatchGroup, mainQueue, ^{
+        
+        ILABAudioTrackExporter *exporter = weakSelf;
+        
         dispatch_group_t finishGroup=dispatch_group_create();
         
         dispatch_group_enter(finishGroup);
-        [assetWriter finishWritingWithCompletionHandler:^{
+        [exporter->assetWriter finishWritingWithCompletionHandler:^{
             dispatch_group_leave(finishGroup);
         }];
         
         dispatch_group_notify(finishGroup, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            dispatch_semaphore_signal(semi);
+            dispatch_semaphore_signal(exporter->semi);
             
         });
     });
@@ -268,6 +280,9 @@
 
 -(void)exportReverseToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock {
     NSURL *exportAudioURL = [[outputURL URLByDeletingLastPathComponent] URLByAppendingPathComponent:@"exported-audio.wav"];
+
+    __weak typeof(self) weakSelf = self;
+
     [self exportToURL:exportAudioURL complete:^(BOOL complete, NSError *error) {
         if (!complete) {
             if (completeBlock) {
@@ -277,15 +292,16 @@
             return;
         }
         
+        ILABAudioTrackExporter *exporter = weakSelf;
         OSStatus theErr = noErr;
         
         // set up input file
         AudioFileID inputAudioFile;
         theErr = AudioFileOpenURL((__bridge CFURLRef)exportAudioURL, kAudioFileReadPermission, 0, &inputAudioFile);
         if (theErr != noErr) {
-            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            exporter->lastError = [NSError errorWithAudioFileStatusCode:theErr];
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -296,10 +312,10 @@
         theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyDataFormat, &thePropertySize, &theFileFormat);
         if (theErr != noErr) {
             AudioFileClose(inputAudioFile);
-            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            exporter->lastError = [NSError errorWithAudioFileStatusCode:theErr];
             
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -310,9 +326,9 @@
         theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyAudioDataByteCount, &thePropertySize, &fileDataSize);
         if (theErr != noErr) {
             AudioFileClose(inputAudioFile);
-            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            exporter->lastError = [NSError errorWithAudioFileStatusCode:theErr];
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -326,10 +342,10 @@
                                       &outputAudioFile);
         if (theErr != noErr) {
             AudioFileClose(inputAudioFile);
-            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            exporter->lastError = [NSError errorWithAudioFileStatusCode:theErr];
 
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -344,7 +360,7 @@
             AudioFileClose(outputAudioFile);
 
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -356,10 +372,10 @@
         if (theErr != noErr) {
             AudioFileClose(inputAudioFile);
             AudioFileClose(outputAudioFile);
-            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            exporter->lastError = [NSError errorWithAudioFileStatusCode:theErr];
 
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -374,7 +390,7 @@
             AudioFileClose(outputAudioFile);
             
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;
@@ -392,10 +408,10 @@
             
             AudioFileClose(inputAudioFile);
             AudioFileClose(outputAudioFile);
-            lastError = [NSError errorWithAudioFileStatusCode:theErr];
+            exporter->lastError = [NSError errorWithAudioFileStatusCode:theErr];
 
             if (completeBlock) {
-                completeBlock(NO, lastError);
+                completeBlock(NO, exporter->lastError);
             }
             
             return;

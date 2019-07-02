@@ -29,6 +29,16 @@
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex;
 
 /**
+ Create a new instance for the track exporter
+ 
+ @param sourceAsset The `AVAsset` to export the audio from.
+ @param trackIndex The index of the audio track to export
+ @prarm timeRange The time range of the asset to be reversed.
+ @return The new instance
+ */
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex timeRange:(CMTimeRange)timeRange;
+
+/**
  Exports the audio track to a .wav audio file
 
  @param outputURL The URL to export to
